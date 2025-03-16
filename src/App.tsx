@@ -193,4 +193,132 @@ async function getResourceGroupNames(subscriptionId: string): Promise<string[]> 
   }
 }
 
+/**
+ * Set a GitHub repository secret.
+ * @param owner - The owner of the repository.
+ * @param repo - The repository name.
+ * @param secretName - The name of the secret.
+ * @param secretValue - The value of the secret.
+ * @param token - The Personal Access Token (PAT) with `repo` or `actions` scope.
+ */
+export const setGitHubSecret = async (
+  owner: string,
+  repo: string,
+  secretName: string,
+  secretValue: string,
+  token: string
+): Promise<void> => {
+  try {
+    // Step 1: Get the public key of the repository
+    const publicKeyResponse = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/actions/secrets/public-key`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+        },
+      }
+    );
+
+    if (!publicKeyResponse.ok) {
+      throw new Error(`Failed to fetch public key: ${publicKeyResponse.statusText}`);
+    }
+
+    const publicKeyData = await publicKeyResponse.json();
+    const { key, key_id } = publicKeyData;
+
+    // Step 2: Encrypt the secret value
+    const secretBytes = new TextEncoder().encode(secretValue);
+    const keyBuffer = Buffer.from(key, "base64");
+
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyBuffer,
+      { name: "RSA-OAEP", hash: "SHA-256" },
+      false,
+      ["encrypt"]
+    );
+
+    const encryptedBuffer = await crypto.subtle.encrypt(
+      { name: "RSA-OAEP" },
+      cryptoKey,
+      secretBytes
+    );
+
+    // Convert encrypted result to Base64 string
+    const encryptedSecret = Buffer.from(new Uint8Array(encryptedBuffer)).toString("base64");
+
+    // Step 3: Set the secret in the repository
+    const setSecretResponse = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/actions/secrets/${secretName}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          encrypted_value: encryptedSecret,
+          key_id: key_id,
+        }),
+      }
+    );
+
+    if (!setSecretResponse.ok) {
+      throw new Error(`Failed to set secret: ${setSecretResponse.statusText}`);
+    }
+
+    console.log(`Secret '${secretName}' has been set successfully!`);
+  } catch (error) {
+    console.error("Error setting GitHub secret:", error);
+  }
+};
+
+/**
+ * Trigger a GitHub Workflow Dispatch Event.
+ * @param owner - The owner of the repository.
+ * @param repo - The repository name.
+ * @param workflowFileName - The name of the workflow file (e.g., "ci.yml").
+ * @param ref - The branch or tag to run the workflow on (e.g., "main").
+ * @param inputs - Optional inputs to pass to the workflow (if configured).
+ * @param token - The Personal Access Token (PAT) with `repo` or `workflow` scope.
+ */
+export const triggerWorkflowDispatch = async (
+  owner: string,
+  repo: string,
+  workflowFileName: string,
+  ref: string,
+  inputs: Record<string, string> = {},
+  token: string
+): Promise<void> => {
+  try {
+    // API endpoint for triggering the workflow
+    const url = `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflowFileName}/dispatches`;
+
+    // Send the POST request to trigger the workflow
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ref,
+        inputs, // Optional inputs for the workflow
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to trigger workflow: ${response.statusText}`);
+    }
+
+    console.log(`Workflow '${workflowFileName}' triggered successfully on ref '${ref}'!`);
+  } catch (error) {
+    console.error("Error triggering GitHub workflow:", error);
+  }
+};
+
 export default App;
