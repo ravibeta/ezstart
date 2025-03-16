@@ -3,6 +3,12 @@ import { InteractiveBrowserCredential } from "@azure/identity";
 import { SubscriptionClient } from "@azure/arm-subscriptions";
 import { ResourceManagementClient } from "@azure/arm-resources";
 
+const {EZSTART_GITHUB_OWNER, EZSTART_GITHUB_REPO, EZSTART_GITHUB_TOKEN} = process.env;
+
+console.log(`EZSTART_GITHUB_OWNER='${EZSTART_GITHUB_OWNER}' has been set successfully!`);
+console.log(`EZSTART_GITHUB_REPO='${EZSTART_GITHUB_REPO}' has been set successfully!`);
+console.log(`EZSTART_GITHUB_TOKEN='${EZSTART_GITHUB_TOKEN}' has been set successfully!`);
+
 interface DropdownProps {
   label: string;
   options: string[];
@@ -33,6 +39,7 @@ const Dropdown: React.FC<DropdownProps> = ({ label, options, value, onChange }) 
 const App: React.FC = () => {
   const [data, setData] = useState<IdName[] | null>(null);
   const [rgs, setRgs] = useState<string[] | null>(null);
+  const [res, setRes] = useState<string[] | null>(null);
   const [subscription, setSubscription] = useState('');
   const [resourceGroup, setResourceGroup] = useState('');
   const [resourceType, setResourceType] = useState('');
@@ -72,6 +79,20 @@ const App: React.FC = () => {
     }
   };
 
+  const fetchResourceNames = async (subscriptionId: string, resourceGroup: string, resourceType: string) => {
+    try {
+      
+      console.log("fetchResourceNames start");
+      console.log(subscriptionId, resourceGroup, resourceType);
+      const resourceNames = await getResourceNames(subscriptionId, resourceGroup, resourceType);
+      console.log(resourceNames);
+      console.log("fetchResourceNames end");
+      setRes(resourceNames);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -86,9 +107,34 @@ const App: React.FC = () => {
     }
   }, [data, subscription]);
 
+  useEffect(() => {
+    if (data && subscription && resourceGroup && resourceType) {
+      const subscriptionId = getSubscriptionIdByName(data, subscription);
+      if (subscriptionId && resourceGroup && resourceType) {
+        fetchResourceNames(subscriptionId?.valueOf(), resourceGroup, resourceType);
+      }
+    }
+  }, [data, subscription, resourceGroup, resourceType]);
+
   // onChange function
   const subscriptionDropdownChange = (selectedValue: string) => {
     setSubscription(selectedValue);
+  };
+  const resourceGroupDropdownChange = (selectedValue: string) => {
+    setResourceGroup(selectedValue);
+  };
+  const resourceTypeDropdownChange = (selectedValue: string) => {
+    // Map selection to corresponding output
+    switch (selectedValue) {
+      case "Web App":
+        setResourceType("Microsoft.Web/sites");
+        break;
+      case "Kubernetes Service":
+        setResourceType("Microsoft.Kubernetes/clusters");
+        break;
+      default:
+        setResourceType(""); // Clear output for unrecognized selections
+    }
   };
 
   return (
@@ -103,17 +149,17 @@ const App: React.FC = () => {
         label="Resource Group"
         options={rgs || []}
         value={resourceGroup}
-        onChange={setResourceGroup}
+        onChange={resourceGroupDropdownChange}
       />
       <Dropdown
         label="Resource Type"
-        options={["Web App", "Kubernetes Cluster"]}
+        options={["Web App", "Kubernetes Service"]}
         value={resourceType}
-        onChange={setResourceType}
+        onChange={resourceTypeDropdownChange}
       />
       <Dropdown
         label="Resource Name"
-        options={data ? getSubscriptionNames(data) : []}
+        options={res || []}
         value={resourceName}
         onChange={setResourceName}
       />
@@ -192,6 +238,49 @@ async function getResourceGroupNames(subscriptionId: string): Promise<string[]> 
     return [];
   }
 }
+
+/**
+ * List IDs and names of resources in a given subscription, resource group, and resource type.
+ * @param subscriptionId - The Azure subscription ID.
+ * @param resourceGroupName - The name of the resource group.
+ * @param resourceType - The type of the resource to filter (e.g., "Microsoft.Web/sites").
+ */
+async function getResourceNames(
+  subscriptionId: string,
+  resourceGroupName: string,
+  resourceType: string
+): Promise<string[]> {
+  try {
+    const options = {
+      clientId: "5e6371ce-dcb9-4a61-8aec-abe5c2d3bac6",
+      tenantId: "1f4c33e1-e960-43bf-a135-6db8b82b6885", // Replace with your Azure tenant ID if applicable
+      redirectUri: "http://localhost:3000"
+    }
+
+    // Authenticate using DefaultAzureCredential
+    const credential = new InteractiveBrowserCredential(options);
+    const resourceClient = new ResourceManagementClient(credential, subscriptionId);
+
+    // Get all resources in the resource group
+    const resources = resourceClient.resources.listByResourceGroup(resourceGroupName);
+    console.log(`Resources of type '${resourceType}' in resource group '${resourceGroupName}':`);
+
+    // Array to store resource group names
+    const resourceNames: string[] = [];
+
+    // Iterate through resources and add names to the array
+    for await (const resource of resources) {
+      if (resource.type === resourceType && resource.name) {
+        resourceNames.push(resource.name);
+      }
+    }
+    
+    return resourceNames;
+  } catch (error) {
+    console.error("Error fetching resources:", error);
+    return [];
+  }
+};
 
 /**
  * Set a GitHub repository secret.
