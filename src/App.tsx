@@ -3,6 +3,7 @@ import { InteractiveBrowserCredential } from "@azure/identity";
 import { SubscriptionClient } from "@azure/arm-subscriptions";
 import { ResourceManagementClient } from "@azure/arm-resources";
 
+
 /// const {EZSTART_GITHUB_OWNER, EZSTART_GITHUB_REPO, EZSTART_GITHUB_TOKEN, EZSTART_GITHUB_WORKFLOW_FILE} = process.env;
 const credentialOptions = {
   clientId: "5e6371ce-dcb9-4a61-8aec-abe5c2d3bac6",
@@ -52,6 +53,7 @@ const App: React.FC = () => {
   const [subscription, setSubscription] = useState('');
   const [subscriptionId, setSubscriptionId] = useState('');
   const [resourceGroup, setResourceGroup] = useState('');
+  const [resourceTypeSel, setResourceTypeSel] = useState('');
   const [resourceType, setResourceType] = useState('');
   const [resourceName, setResourceName] = useState('');
   const [banner, setBanner] = useState('');
@@ -139,12 +141,15 @@ const App: React.FC = () => {
     // Map selection to corresponding output
     switch (selectedValue) {
       case "Web App":
+        setResourceTypeSel(selectedValue);
         setResourceType("Microsoft.Web/sites");
         break;
       case "Kubernetes Service":
-        setResourceType("Microsoft.Kubernetes/clusters");
+        setResourceTypeSel(selectedValue);
+        setResourceType("Microsoft.ContainerService/managedClusters");
         break;
       default:
+        setResourceTypeSel("");
         setResourceType(""); // Clear output for unrecognized selections
     }
   };
@@ -166,7 +171,7 @@ const App: React.FC = () => {
       <Dropdown
         label="Resource Type"
         options={["Web App", "Kubernetes Service"]}
-        value={resourceType}
+        value={resourceTypeSel}
         onChange={resourceTypeDropdownChange}
       />
       <Dropdown
