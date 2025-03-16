@@ -3,8 +3,17 @@ import { InteractiveBrowserCredential } from "@azure/identity";
 import { SubscriptionClient } from "@azure/arm-subscriptions";
 import { ResourceManagementClient } from "@azure/arm-resources";
 
-const {EZSTART_GITHUB_OWNER, EZSTART_GITHUB_REPO, EZSTART_GITHUB_TOKEN} = process.env;
+/// const {EZSTART_GITHUB_OWNER, EZSTART_GITHUB_REPO, EZSTART_GITHUB_TOKEN, EZSTART_GITHUB_WORKFLOW_FILE} = process.env;
+const credentialOptions = {
+  clientId: "5e6371ce-dcb9-4a61-8aec-abe5c2d3bac6",
+  tenantId: "1f4c33e1-e960-43bf-a135-6db8b82b6885", // Replace with your Azure tenant ID if applicable
+  redirectUri: "http://localhost:3000"
+}
 
+const EZSTART_GITHUB_OWNER = "ravibeta";
+const EZSTART_GITHUB_REPO = "ezstart";
+const EZSTART_GITHUB_TOKEN = "";
+const EZSTART_GITHUB_WORKFLOW_FILE = "use-github-secrets.yml";
 console.log(`EZSTART_GITHUB_OWNER='${EZSTART_GITHUB_OWNER}' has been set successfully!`);
 console.log(`EZSTART_GITHUB_REPO='${EZSTART_GITHUB_REPO}' has been set successfully!`);
 console.log(`EZSTART_GITHUB_TOKEN='${EZSTART_GITHUB_TOKEN}' has been set successfully!`);
@@ -41,12 +50,17 @@ const App: React.FC = () => {
   const [rgs, setRgs] = useState<string[] | null>(null);
   const [res, setRes] = useState<string[] | null>(null);
   const [subscription, setSubscription] = useState('');
+  const [subscriptionId, setSubscriptionId] = useState('');
   const [resourceGroup, setResourceGroup] = useState('');
   const [resourceType, setResourceType] = useState('');
   const [resourceName, setResourceName] = useState('');
   const [banner, setBanner] = useState('');
 
   const handleStart = () => {
+    if (subscriptionId && resourceGroup && resourceType && resourceName) {
+      setGitHubSecret(EZSTART_GITHUB_OWNER, EZSTART_GITHUB_REPO, "RESOURCE_NAME", "web-app-12345678", EZSTART_GITHUB_TOKEN).then(() => {console.log("setGitHubSecret done")});
+      triggerWorkflowDispatch(EZSTART_GITHUB_OWNER, EZSTART_GITHUB_REPO, EZSTART_GITHUB_WORKFLOW_FILE, "master", {"subscription": subscriptionId, "resourceGroup": resourceGroup, "resourceType": resourceType, "resourceName": resourceName}, EZSTART_GITHUB_TOKEN).then(() => {console.log("triggerWorkflowDispatch done")});
+    }
     setBanner('Operation submitted successfully');
   };
 
@@ -81,12 +95,9 @@ const App: React.FC = () => {
 
   const fetchResourceNames = async (subscriptionId: string, resourceGroup: string, resourceType: string) => {
     try {
-      
-      console.log("fetchResourceNames start");
       console.log(subscriptionId, resourceGroup, resourceType);
       const resourceNames = await getResourceNames(subscriptionId, resourceGroup, resourceType);
       console.log(resourceNames);
-      console.log("fetchResourceNames end");
       setRes(resourceNames);
     } catch (error) {
       console.error(error);
@@ -102,6 +113,7 @@ const App: React.FC = () => {
       const subscriptionId = getSubscriptionIdByName(data, subscription);
       if (subscriptionId) {
         console.log(subscriptionId);
+        setSubscriptionId(subscriptionId);
         fetchResourceGroups(subscriptionId?.valueOf());
       }
     }
@@ -171,14 +183,9 @@ const App: React.FC = () => {
 
 async function getAzureSubscriptionNames(): Promise<IdName[]> {
   try {
-    const options =  {
-      clientId: "5e6371ce-dcb9-4a61-8aec-abe5c2d3bac6",
-      tenantId: "1f4c33e1-e960-43bf-a135-6db8b82b6885", // Replace with your Azure tenant ID if applicable
-      redirectUri: "http://localhost:3000"
-    }
       
     // Create a DefaultAzureCredential. This will use the logged-in user's credentials.
-    const credential = new InteractiveBrowserCredential(options);
+    const credential = new InteractiveBrowserCredential(credentialOptions);
     //const credential = new AzureCliCredential();
 
     // Create a SubscriptionClient using the credential
@@ -206,14 +213,9 @@ async function getAzureSubscriptionNames(): Promise<IdName[]> {
 
 async function getResourceGroupNames(subscriptionId: string): Promise<string[]> {
   try {
-    const options = {
-      clientId: "5e6371ce-dcb9-4a61-8aec-abe5c2d3bac6",
-      tenantId: "1f4c33e1-e960-43bf-a135-6db8b82b6885", // Replace with your Azure tenant ID if applicable
-      redirectUri: "http://localhost:3000"
-    }
 
     // Create a DefaultAzureCredential. This will use the logged-in user's credentials.
-    const credential = new InteractiveBrowserCredential(options);
+    const credential = new InteractiveBrowserCredential(credentialOptions);
     //const credential = new AzureCliCredential();
 
     // Create a ResourceManagementClient using the credential and subscription ID
@@ -251,14 +253,9 @@ async function getResourceNames(
   resourceType: string
 ): Promise<string[]> {
   try {
-    const options = {
-      clientId: "5e6371ce-dcb9-4a61-8aec-abe5c2d3bac6",
-      tenantId: "1f4c33e1-e960-43bf-a135-6db8b82b6885", // Replace with your Azure tenant ID if applicable
-      redirectUri: "http://localhost:3000"
-    }
 
     // Authenticate using DefaultAzureCredential
-    const credential = new InteractiveBrowserCredential(options);
+    const credential = new InteractiveBrowserCredential(credentialOptions);
     const resourceClient = new ResourceManagementClient(credential, subscriptionId);
 
     // Get all resources in the resource group
@@ -274,7 +271,7 @@ async function getResourceNames(
         resourceNames.push(resource.name);
       }
     }
-    
+
     return resourceNames;
   } catch (error) {
     console.error("Error fetching resources:", error);
@@ -409,5 +406,6 @@ export const triggerWorkflowDispatch = async (
     console.error("Error triggering GitHub workflow:", error);
   }
 };
+
 
 export default App;
